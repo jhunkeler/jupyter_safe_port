@@ -94,17 +94,22 @@ elif (( port_remote_begin < $PORT_MIN )) || (( port_remote_begin > $PORT_MAX ));
     exit 1
 fi
 
-# Execute the port test script on the remote host
-port_remote=$(cat $(which next_tcp_port) | ssh $server "bash -s -- $port_remote_begin $port_remote_end")
-if (( $? )); then
-    echo "error: $server: connection failed" >&2
-    exit 1
-fi
-
 # Handle nonsensical host request (i.e. remote host is the local host)
 # You can't bind to the same port twice
-if [[ $(hostname) =~ $server ]] && (( port_remote == port_local_begin )); then
+# And there's no reason to use ssh to obtain the port information either
+if [[ $(hostname) =~ $server ]] || [[ $server == "localhost"* ]]; then
+    # Adjust local port to avoid collision with "remote" port
     (( port_local_begin++ ))
+
+    # Execute the port test script on the local host
+    port_remote=$(next_tcp_port $port_remote_begin $port_remote_end)
+    if (( $? )); then
+        echo "error: $server: connection failed" >&2
+        exit 1
+    fi
+else
+    # Execute the port test script on the remote host
+    port_remote=$(cat $(which next_tcp_port) | ssh $server "bash -s -- $port_remote_begin $port_remote_end")
 fi
 port_local=$(next_tcp_port $port_local_begin)
 
