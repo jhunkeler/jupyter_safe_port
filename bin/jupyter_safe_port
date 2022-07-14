@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+usage() {
+    printf \
+"usage: %s [-h] [-c] [-d] {host} [port]
+
+Discovers the next TCP port available for your notebook server and returns
+execution instructions. If the argument '-c' is present and the requested
+port is already bound on the remote host, return the SSH connection string
+
+Positional arguments:
+    host    host name or IP of remote system
+    port    notebook server port to poll (default: $PORT_MIN)
+
+Arguments:
+    -h    show this usage statement
+    -c    only generate the SSH connection string
+    -d    dump ports (useful in scripts)
+              format: local remote
+" $(basename $0)
+}
+
+user=$(id -u -n)
+PORT_MIN=1024
+if ! (( EUID )); then
+    PORT_MIN=1
+fi
+PORT_MAX=65535
+dump=0
+connect_only=0
+
+
+# Parse arguments
+argv=($*)
+argc="${#argv[@]}"
+args=()
+
+if (( argc < 1 )); then
+    echo "error: not enough arguments"
+    usage
+    exit 1
+fi
+
+i=0
+while [[ $i < $argc ]]; do
+    key="${argv[$i]}"
+    if [[ $key =~ ^- ]]; then
+        key="${key#-*}"
+        case "$key" in
+            h)
+                usage
+                exit 0
+                ;;
+            c)
+                connect_only=1
+                (( i++ ))
+                continue
+                ;;
+            d)
+                dump=1
+                (( i++ ))
+                continue
+                ;;
+            *)
+                echo "error: unknown argument" >&2
+                usage
+                exit 1
+                ;;
+        esac
+    fi
+    args+=("$key")
+    (( i++ ))
+done
+
+server="${args[0]}"
+port="${args[1]}"
+port_local_begin=$PORT_MIN
+port_remote_begin=${port:-$PORT_MIN}
+port_remote_end=
+(( connect_only )) && port_remote_end=$port_remote_begin
+
+if [[ -z "$server" ]]; then
+    echo "error: host name or IP required" >&2  
+    usage
+    exit 1
+fi
+
+if ! [[ $port_remote_begin =~ ^[0-9]+$ ]]; then
+    echo "error: port must be an integer" >&2
+    usage
+    exit 1
+elif (( port_remote_begin < $PORT_MIN )) || (( port_remote_begin > $PORT_MAX )); then
+    echo "error: port must be an integer between $PORT_MIN-$PORT_MAX" >&2
+    usage
+    exit 1
+fi
+
+# Execute the port test script on the remote host
+port_remote=$(cat $(which next_tcp_port) | ssh $server "bash -s -- $port_remote_begin $port_remote_end")
+if (( $? )); then
+    echo "error: $server: connection failed" >&2
+    exit 1
+fi
+
+# Handle nonsensical host request (i.e. remote host is the local host)
+# You can't bind to the same port twice
+if [[ $(hostname) =~ $server ]] && (( port_remote == port_local_begin )); then
+    (( port_local_begin++ ))
+fi
+port_local=$(next_tcp_port $port_local_begin)
+
+if (( connect_only )); then
+    if ! (( port_remote < 0 )); then
+        if ! (( dump )); then
+            echo "error: $port_remote/tcp is not in use on $server" >&2
+            exit 1
+        fi
+        # Dump mode prints '-1' instead of throwing an error message
+        port_remote=-1
+    else 
+        port_remote=${port}
+    fi
+else
+    if (( port_remote < 0 )); then
+        echo "error: no ports available in range ${port_remote_begin}+" >&2
+        exit 1
+    fi
+fi
+
+# Show ports to use and exit
+if (( dump )); then
+    echo "$port_local $port_remote"
+    exit 0
+fi
+
+# Show execution instructions
+if ! (( connect_only )); then
+    echo "Execute on $server:"
+    echo "jupyter notebook --no-browser --port=$port_remote"
+    echo
+fi
+
+echo "Connect via:"
+echo "ssh -N -f -L$port_local:localhost:$port_remote $user@$server"
