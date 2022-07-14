@@ -24,14 +24,12 @@ fi
 get_ports_tcp() {
     local data=$(netstat $netstat_args)
     local ports=$(netstat_parse "$data")
-    local i=0
 
     while read port; do
         if ! [[ $port =~ ^[0-9]+$ ]]; then
             continue
         fi
         echo "$port"
-        (( i++ ))
     done <<< "$ports"
 }
 
