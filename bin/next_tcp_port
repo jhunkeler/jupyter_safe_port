@@ -27,10 +27,7 @@ get_ports_tcp() {
     local i=0
 
     while read port; do
-        if (( i < 2 ));then 
-            (( i++ ))
-            continue
-        elif ! [[ $port =~ ^[0-9]+$ ]]; then
+        if ! [[ $port =~ ^[0-9]+$ ]]; then
             continue
         fi
         echo "$port"
