@@ -64,7 +64,7 @@ Oops, you forgot about that web server test. 8080 is already bound so you're giv
 Let's say you have closed your laptop and lost all of your connections. If you can remember the remote port you used then `-c` will get you up and running in no time...
  
 ```
-$ jupyter_safe_port example.lan -c 8080
+$ jupyter_safe_port example.lan -c 8081
 Connect via:
-ssh -N -f -L1024:localhost:8080 user@example.lan
+ssh -N -f -L1024:localhost:8081 user@example.lan
 ```
