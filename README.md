@@ -84,12 +84,18 @@ Here are a few ways to use it...
 ```shell
 #!/usr/bin/env bash
 
-if type -p jupyter_safe_port &>/dev/null; then
+# System to spawn the notebook server on
+server=example.lan
+
+# Conda environment to use
+environ=XYZ
+
+if ! [[ -x $(command -v "jupyter_safe_port") ]]; then
     echo "jupyter_safe_port is not installed" >&2
     exit 1
 fi
 
-result=$(jupyter_safe_port -d $server)
+result="$(jupyter_safe_port -d $server)"
 if [ -z "$result" ]; then
     # jupyter_safe_port failed
     # case 1: not enough arguments
@@ -100,21 +106,41 @@ if [ -z "$result" ]; then
 fi
 
 # Extract ports from result
-read $port_local $port_remote <<< "$result"
-if (( port_remote < 0 )); then {
+read port_local port_remote <<< "$result"
+if [[ -z "$port_local" ]]; then
+    # case 1: no local ports available
+    exit 1
+elif [[ -z "$port_remote" ]] || (( port_remote < 0 )); then
     # case 1: no remote ports available
     # case 2: if using '-c', no service is present on the requested port
     exit 1
-}
+fi
 
-# Spawn a local screen session to manage a remote jupyter server.
-# You'd really want to use screen on the remote instead... This is just an example.
-screen -dmS "jupyter_$server_$remote_port" ssh $server "source ~/miniconda3/etc/profile.d/conda.sh \
-    && conda activate XYZ \
-    && jupyter notebook --no-browser --port=$port_remote"
+echo "Starting remote jupyter session on $server:$port_remote"
+session="jupyter_${port_remote}"
+ssh $server "tmux new-session -d -s $session \
+    'source ~/.bash_profile \
+    && source ~/local/miniconda3/etc/profile.d/conda.sh \
+    && conda activate $environ \
+    && jupyter notebook --no-browser --port=$port_remote'"
+if (( $? )); then
+    echo "Failed to connect to $server" >&2
+    exit 1
+fi
+
+echo "Remote tmux session is: $session"
+echo
+echo "To kill the notebook server:"
+echo "ssh $server 'tmux kill-session -t $session'"
+echo
 
 # Forward the ports to the local system
-echo "Forwarding $port_remote to localhost:$port_local"
-echo "To interrupt the session press: ctrl-c
-ssh -N $port_local:localhost:$port_remote $server
+echo "Forwarding $server:$port_remote to localhost:$port_local"
+echo "To interrupt the session press: ctrl-c"
+
+ssh -N -L$port_local:localhost:$port_remote $server
+if (( $? )); then
+    echo "Failed to forward port." >&2
+    exit 1
+fi
 ```
