@@ -75,7 +75,7 @@ ssh -N -L1024:localhost:8081 user@example.lan
 You can use `jupyter_safe_port` in your scripts. `-d` returns the local port followed by the remote port.
 
 ```
-$ jupyter_safe_port example.lan -c 8081
+$ jupyter_safe_port example.lan -d 8081
 1024 8081
 ```
 
