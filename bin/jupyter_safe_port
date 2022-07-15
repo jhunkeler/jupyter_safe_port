@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 usage() {
     printf \
-"usage: %s [-h] [-c] [-d] {host} [port]
+"usage: %s [-hcdf] {host} [port]
 
 Discovers the next TCP port available for your notebook server and returns
 execution instructions. If the argument '-c' is present and the requested
