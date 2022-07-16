@@ -83,12 +83,24 @@ Here are a few ways to use it...
 
 ```shell
 #!/usr/bin/env bash
+interrupt() {
+    echo "Interrupted" >&2
+    exit 0
+}
+trap interrupt SIGINT SIGTERM
 
 # System to spawn the notebook server on
 server=example.lan
 
-# Conda environment to use
+# Where is conda located? (Use single-quotes to avoid expanding ~ or variables)
+conda_root='~/miniconda3'
+
+# Conda environment to activate
 environ=XYZ
+
+# Configure port range (optional)
+range_low=
+range_high=
 
 if ! [[ -x $(command -v "jupyter_safe_port") ]]; then
     echo "jupyter_safe_port is not installed" >&2
@@ -96,7 +108,7 @@ if ! [[ -x $(command -v "jupyter_safe_port") ]]; then
 fi
 
 result="$(jupyter_safe_port -d $server)"
-if [ -z "$result" ]; then
+if (( $? )) || [ -z "$result" ]; then
     # jupyter_safe_port failed
     # case 1: not enough arguments
     # case 2: invalid argument
@@ -107,30 +119,38 @@ fi
 
 # Extract ports from result
 read port_local port_remote <<< "$result"
-if [[ -z "$port_local" ]]; then
-    # case 1: no local ports available
+
+if [[ -z "$port_local" ]] || [[ -z "$port_remote" ]]; then
+    # case 1: unhandled exception
     exit 1
-elif [[ -z "$port_remote" ]] || (( port_remote < 0 )); then
-    # case 1: no remote ports available
+fi
+
+if (( port_local < 0 )); then
+    # case 1: no local ports are available in range
+    exit 1
+fi
+
+if (( port_remote < 0 )); then
+    # case 1: no remote ports are available in range
     # case 2: if using '-c', no service is present on the requested port
     exit 1
 fi
 
 echo "Starting remote jupyter session on $server:$port_remote"
 session="jupyter_${port_remote}"
-ssh $server "tmux new-session -d -s $session \
-    'source ~/.bash_profile \
-    && source ~/local/miniconda3/etc/profile.d/conda.sh \
+ssh $server "bash -c 'tmux new-session -d -s $session \
+    \"source ~/.bash_profile \
+    && source $conda_root/etc/profile.d/conda.sh \
     && conda activate $environ \
-    && jupyter notebook --no-browser --port=$port_remote'"
+    && jupyter notebook --no-browser --port=$port_remote\"'"
 if (( $? )); then
     echo "Failed to connect to $server" >&2
     exit 1
 fi
 
-echo "Remote tmux session is: $session"
+echo "Remote tmux session name: $session"
 echo
-echo "To kill the notebook server:"
+echo "To kill the tmux session and the jupyter notebook server:"
 echo "ssh $server 'tmux kill-session -t $session'"
 echo
 
