@@ -111,13 +111,13 @@ if [[ $(hostname) =~ $server ]] || [[ $server == "localhost"* ]]; then
 
     # Execute the port test script on the local host
     port_remote=$(next_tcp_port $port_remote_begin $port_remote_end)
+else
+    # Execute the port test script on the remote host
+    port_remote=$(cat $(which next_tcp_port) | ssh $server "bash -s -- $port_remote_begin $port_remote_end")
     if (( $? )); then
         echo "error: $server: connection failed" >&2
         exit 1
     fi
-else
-    # Execute the port test script on the remote host
-    port_remote=$(cat $(which next_tcp_port) | ssh $server "bash -s -- $port_remote_begin $port_remote_end")
 fi
 port_local=$(next_tcp_port $port_local_begin)
 
